@@ -1,0 +1,6 @@
+# File environment, jangan pernah di-upload!
+.env
+
+# Hasil kompilasi/build
+*.exe
+backend-go
