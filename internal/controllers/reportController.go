@@ -220,3 +220,74 @@ func ExportSalesSummaryToExcel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal menulis file excel"})
 	}
 }
+
+// GetSalesChartData menyiapkan data untuk ditampilkan dalam bentuk grafik
+func GetSalesChartData(c *gin.Context) {
+	orderCollection := config.DB.Collection("orders")
+	period := c.DefaultQuery("period", "monthly")
+	now := time.Now()
+	var startDate, endDate time.Time
+
+	// ... (copy-paste blok 'switch period' yang sama persis dari GetSalesSummary)
+	switch period {
+	case "daily":
+		startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		startDate = startOfDay
+		endDate = startOfDay.Add(24*time.Hour - 1*time.Nanosecond)
+	case "weekly":
+		weekday := now.Weekday()
+		offset := int(time.Monday - weekday)
+		if weekday == time.Sunday {
+			offset = -6
+		}
+		startOfWeek := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, offset)
+		startDate = startOfWeek
+		endDate = startOfWeek.AddDate(0, 0, 7).Add(-1 * time.Nanosecond)
+	case "yearly":
+		startOfYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		startDate = startOfYear
+		endDate = startOfYear.AddDate(1, 0, 0).Add(-1 * time.Nanosecond)
+	case "monthly":
+		fallthrough
+	default:
+		startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+		startDate = startOfMonth
+		endDate = startOfMonth.AddDate(0, 1, 0).Add(-1 * time.Nanosecond)
+	}
+
+	pipeline := []bson.M{
+		{
+			"$match": bson.M{
+				"status":    "selesai",
+				"updatedAt": bson.M{"$gte": startDate, "$lte": endDate},
+			},
+		},
+		{
+			// Kelompokkan data berdasarkan HARI
+			"$group": bson.M{
+				"_id": bson.M{
+					"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$updatedAt"},
+				},
+				"totalRevenue": bson.M{"$sum": "$totalPrice"},
+			},
+		},
+		{
+			// Urutkan berdasarkan tanggal
+			"$sort": bson.M{"_id": 1},
+		},
+	}
+
+	cursor, err := orderCollection.Aggregate(context.Background(), pipeline)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil data grafik"})
+		return
+	}
+
+	var results []bson.M
+	if err = cursor.All(context.Background(), &results); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memproses data grafik"})
+		return
+	}
+
+	c.JSON(http.StatusOK, results)
+}

@@ -281,3 +281,52 @@ func GetMonitoringOrders(c *gin.Context) {
 
 	c.JSON(http.StatusOK, results)
 }
+
+// GetOrderByID mengambil satu pesanan berdasarkan ID-nya
+func GetOrderByID(c *gin.Context) {
+	orderCollection := config.DB.Collection("orders")
+	orderID, err := primitive.ObjectIDFromHex(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "ID Pesanan tidak valid"})
+		return
+	}
+
+	pipeline := []bson.M{
+		{
+			"$match": bson.M{"_id": orderID},
+		},
+		{
+			"$lookup": bson.M{
+				"from":         "customers",
+				"localField":   "customerId",
+				"foreignField": "_id",
+				"as":           "customerInfo",
+			},
+		},
+		{
+			"$unwind": bson.M{
+				"path":                       "$customerInfo",
+				"preserveNullAndEmptyArrays": true,
+			},
+		},
+	}
+
+	var results []bson.M
+	cursor, err := orderCollection.Aggregate(context.Background(), pipeline)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal mengambil data pesanan"})
+		return
+	}
+
+	if err = cursor.All(context.Background(), &results); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memproses data pesanan"})
+		return
+	}
+
+	if len(results) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Pesanan tidak ditemukan"})
+		return
+	}
+
+	c.JSON(http.StatusOK, results[0])
+}

@@ -24,6 +24,7 @@ func SetupRoutes(router *gin.Engine) {
 			{
 				reports.GET("/sales-summary", middleware.HasAnyRole(models.RoleManajer, models.RoleAdmin), controllers.GetSalesSummary)
 				reports.GET("/sales-summary/export", middleware.HasAnyRole(models.RoleManajer, models.RoleAdmin), controllers.ExportSalesSummaryToExcel)
+				reports.GET("/sales-chart", middleware.HasAnyRole(models.RoleManajer, models.RoleAdmin), controllers.GetSalesChartData)
 			}
 		}
 
@@ -32,6 +33,8 @@ func SetupRoutes(router *gin.Engine) {
 		orders.Use(middleware.Protect())
 		{
 			orders.POST("", middleware.HasAnyRole(models.RoleKasir, models.RoleAdmin), controllers.CreateOrder)
+
+			orders.GET("/:id", controllers.GetOrderByID) // Dapat diakses semua peran yang login
 
 			// Rute untuk Designer
 			orders.GET("/queue/designer", middleware.HasAnyRole(models.RoleDesigner, models.RoleAdmin), controllers.GetDesignerQueue)
@@ -51,6 +54,12 @@ func SetupRoutes(router *gin.Engine) {
 				customers.GET("", controllers.GetCustomers)
 			}
 			orders.GET("/monitoring", middleware.HasAnyRole(models.RoleManajer, models.RoleAdmin), controllers.GetMonitoringOrders)
+		}
+		notifications := api.Group("/notifications")
+		notifications.Use(middleware.Protect()) // Semua rute notifikasi butuh login
+		{
+			notifications.GET("", controllers.GetNotifications)
+			notifications.PATCH("/:id/read", controllers.MarkAsRead)
 		}
 	}
 }
